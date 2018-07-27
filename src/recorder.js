@@ -111,7 +111,7 @@ export class Recorder {
             function getCurrentBuffer() {
                 let buffers = [];
                 for (let channel = 0; channel < numChannels; channel++) {
-                    buffers.push(currentBuffer[channel], this.config.bufferLen);
+                    buffers.push(currentBuffer[channel]);
                 }
                 this.postMessage({command: 'getCurrentBuffer', data: buffers});
             }
