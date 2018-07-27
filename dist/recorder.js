@@ -49,6 +49,7 @@ var Recorder = exports.Recorder = function () {
         this.recording = false;
         this.callbacks = {
             getBuffer: [],
+            getCurrentBuffer: [],
             exportWAV: []
         };
 
@@ -278,6 +279,16 @@ var Recorder = exports.Recorder = function () {
             this.callbacks.getBuffer.push(cb);
 
             this.worker.postMessage({ command: 'getBuffer' });
+        }
+    }, {
+        key: 'getCurrentBuffer',
+        value: function getCurrentBuffer(cb) {
+            cb = cb || this.config.callback;
+            if (!cb) throw new Error('Callback not set');
+
+            this.callbacks.getCurrentBuffer.push(cb);
+
+            this.worker.postMessage({ command: 'getCurrentBuffer' });
         }
     }, {
         key: 'exportWAV',
