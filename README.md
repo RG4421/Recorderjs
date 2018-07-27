@@ -60,6 +60,9 @@ This will pass the recorded stereo buffer (as an array of two Float32Arrays, for
 
 This sample code will play back the stereo buffer.
 
+  rec.getCurrentBuffer([callback])
+
+This will pass the current stereo buffer (as an array of two Float32Arrays, for the separate left and right channels) to the callback.
 
     rec.configure(config)
 

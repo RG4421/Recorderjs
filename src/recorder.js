@@ -11,6 +11,7 @@ export class Recorder {
 
     callbacks = {
         getBuffer: [],
+        getCurrentBuffer: [],
         exportWAV: []
     };
 
@@ -41,6 +42,7 @@ export class Recorder {
         this.worker = new InlineWorker(function () {
             let recLength = 0,
                 recBuffers = [],
+                currentBuffer = [],
                 sampleRate,
                 numChannels;
 
@@ -58,6 +60,9 @@ export class Recorder {
                     case 'getBuffer':
                         getBuffer();
                         break;
+                    case 'getCurrentBuffer':
+                        getCurrentBuffer();
+                        break;
                     case 'clear':
                         clear();
                         break;
@@ -73,6 +78,7 @@ export class Recorder {
             function record(inputBuffer) {
                 for (var channel = 0; channel < numChannels; channel++) {
                     recBuffers[channel].push(inputBuffer[channel]);
+                    currentBuffer[channel] = inputBuffer[channel]
                 }
                 recLength += inputBuffer[0].length;
             }
@@ -102,9 +108,18 @@ export class Recorder {
                 this.postMessage({command: 'getBuffer', data: buffers});
             }
 
+            function getCurrentBuffer() {
+                let buffers = [];
+                for (let channel = 0; channel < numChannels; channel++) {
+                    buffers.push(currentBuffer[channel], this.config.bufferLen);
+                }
+                this.postMessage({command: 'getCurrentBuffer', data: buffers});
+            }
+
             function clear() {
                 recLength = 0;
                 recBuffers = [];
+                currentBuffer = [];
                 initBuffers();
             }
 
@@ -225,6 +240,15 @@ export class Recorder {
         this.callbacks.getBuffer.push(cb);
 
         this.worker.postMessage({command: 'getBuffer'});
+    }
+
+    getCurrentBuffer(cb) {
+        cb = cb || this.config.callback;
+        if (!cb) throw new Error('Callback not set');
+
+        this.callbacks.getCurrentBuffer.push(cb);
+
+        this.worker.postMessage({command: 'getCurrentBuffer'});
     }
 
     exportWAV(cb, mimeType) {
