@@ -161,6 +161,7 @@ var Recorder = exports.Recorder = function () {
             function initBuffers() {
                 for (var channel = 0; channel < numChannels; channel++) {
                     recBuffers[channel] = [];
+                    currentBuffer[channel] = [];
                 }
             }
 

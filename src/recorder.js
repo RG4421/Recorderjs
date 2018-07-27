@@ -126,6 +126,7 @@ export class Recorder {
             function initBuffers() {
                 for (let channel = 0; channel < numChannels; channel++) {
                     recBuffers[channel] = [];
+                    currentBuffer[channel] = [];
                 }
             }
 
