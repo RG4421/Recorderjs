@@ -12,6 +12,7 @@ export class Recorder {
     callbacks = {
         getBuffer: [],
         getCurrentBuffer: [],
+        getAudioLossInfo: [],
         exportWAV: []
     };
 
@@ -22,8 +23,29 @@ export class Recorder {
         this.context.createJavaScriptNode).call(this.context,
             this.config.bufferLen, this.config.numChannels, this.config.numChannels);
 
+        this.expectedBufferTime = this.config.bufferLen / 44100 * 1000; // in milliseconds
+        this.audioProcessStartTime = null;
+        this.audioProcessEndTime = null;
+        this.totalNumberOfBuffers = 0;
+        this.lossOccurrences = 0;
+        // default acceptable delay is twice the expected buffer time (ms)
+        this.acceptableDelay = this.config.acceptableDelay == null ?
+          (this.expectedBufferTime * -2) :
+          (this.config.acceptableDelay * -1);
         this.node.onaudioprocess = (e) => {
             if (!this.recording) return;
+
+            if (this.audioProcessStartTime) {
+              this.totalNumberOfBuffers += 1;
+              this.audioProcessEndTime = performance.now();
+
+              const timeToNewAudioProcess = this.audioProcessEndTime - this.audioProcessStartTime;
+              const difference = this.expectedBufferTime - timeToNewAudioProcess;
+
+              if (difference < this.acceptableDelay) {
+                this.lossOccurrences += 1;
+              }
+            }
 
             var buffer = [];
             for (var channel = 0; channel < this.config.numChannels; channel++) {
@@ -33,6 +55,8 @@ export class Recorder {
                 command: 'record',
                 buffer: buffer
             });
+
+            this.audioProcessStartTime = performance.now();
         };
 
         source.connect(this.node);
@@ -62,6 +86,9 @@ export class Recorder {
                         break;
                     case 'getCurrentBuffer':
                         getCurrentBuffer();
+                        break;
+                    case 'getAudioLossInfo':
+                        getAudioLossInfo(e.data.audioLossInfo);
                         break;
                     case 'clear':
                         clear();
@@ -114,6 +141,13 @@ export class Recorder {
                     buffers.push(currentBuffer[channel]);
                 }
                 this.postMessage({command: 'getCurrentBuffer', data: buffers});
+            }
+
+            function getAudioLossInfo(audioLossInfo) {
+                this.postMessage({
+                  command: 'getAudioLossInfo',
+                  data: audioLossInfo,
+                });
             }
 
             function clear() {
@@ -224,6 +258,7 @@ export class Recorder {
 
     record() {
         this.recording = true;
+        this.audioProcessStartTime = performance.now();
     }
 
     stop() {
@@ -231,6 +266,8 @@ export class Recorder {
     }
 
     clear() {
+        this.totalNumberOfBuffers = 0;
+        this.lossOccurrences = 0;
         this.worker.postMessage({command: 'clear'});
     }
 
@@ -250,6 +287,21 @@ export class Recorder {
         this.callbacks.getCurrentBuffer.push(cb);
 
         this.worker.postMessage({command: 'getCurrentBuffer'});
+    }
+
+    getAudioLossInfo(cb) {
+        cb = cb || this.config.callback;
+        if (!cb) throw new Error('Callback not set');
+
+        this.callbacks.getAudioLossInfo.push(cb);
+
+        this.worker.postMessage({
+          command: 'getAudioLossInfo',
+          audioLossInfo: {
+            numberOfBuffers: this.totalNumberOfBuffers,
+            numberOfLosses: this.lossOccurrences,
+          }
+        });
     }
 
     exportWAV(cb, mimeType) {
