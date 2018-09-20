@@ -50,6 +50,7 @@ var Recorder = exports.Recorder = function () {
         this.callbacks = {
             getBuffer: [],
             getCurrentBuffer: [],
+            getAudioLossInfo: [],
             exportWAV: []
         };
 
@@ -57,8 +58,27 @@ var Recorder = exports.Recorder = function () {
         this.context = source.context;
         this.node = (this.context.createScriptProcessor || this.context.createJavaScriptNode).call(this.context, this.config.bufferLen, this.config.numChannels, this.config.numChannels);
 
+        this.expectedBufferTime = this.config.bufferLen / 44100 * 1000; // in milliseconds
+        this.audioProcessStartTime = null;
+        this.audioProcessEndTime = null;
+        this.totalNumberOfBuffers = 0;
+        this.lossOccurrences = 0;
+        // default acceptable delay is twice the expected buffer time (ms)
+        this.acceptableDelay = this.config.acceptableDelay == null ? this.expectedBufferTime * -2 : this.config.acceptableDelay * -1;
         this.node.onaudioprocess = function (e) {
             if (!_this.recording) return;
+
+            if (_this.audioProcessStartTime) {
+                _this.totalNumberOfBuffers += 1;
+                _this.audioProcessEndTime = performance.now();
+
+                var timeToNewAudioProcess = _this.audioProcessEndTime - _this.audioProcessStartTime;
+                var difference = _this.expectedBufferTime - timeToNewAudioProcess;
+
+                if (difference < _this.acceptableDelay) {
+                    _this.lossOccurrences += 1;
+                }
+            }
 
             var buffer = [];
             for (var channel = 0; channel < _this.config.numChannels; channel++) {
@@ -68,6 +88,8 @@ var Recorder = exports.Recorder = function () {
                 command: 'record',
                 buffer: buffer
             });
+
+            _this.audioProcessStartTime = performance.now();
         };
 
         source.connect(this.node);
@@ -97,6 +119,9 @@ var Recorder = exports.Recorder = function () {
                         break;
                     case 'getCurrentBuffer':
                         getCurrentBuffer();
+                        break;
+                    case 'getAudioLossInfo':
+                        getAudioLossInfo(e.data.audioLossInfo);
                         break;
                     case 'clear':
                         clear();
@@ -149,6 +174,13 @@ var Recorder = exports.Recorder = function () {
                     buffers.push(currentBuffer[channel]);
                 }
                 this.postMessage({ command: 'getCurrentBuffer', data: buffers });
+            }
+
+            function getAudioLossInfo(audioLossInfo) {
+                this.postMessage({
+                    command: 'getAudioLossInfo',
+                    data: audioLossInfo
+                });
             }
 
             function clear() {
@@ -260,6 +292,7 @@ var Recorder = exports.Recorder = function () {
         key: 'record',
         value: function record() {
             this.recording = true;
+            this.audioProcessStartTime = performance.now();
         }
     }, {
         key: 'stop',
@@ -269,6 +302,8 @@ var Recorder = exports.Recorder = function () {
     }, {
         key: 'clear',
         value: function clear() {
+            this.totalNumberOfBuffers = 0;
+            this.lossOccurrences = 0;
             this.worker.postMessage({ command: 'clear' });
         }
     }, {
@@ -290,6 +325,22 @@ var Recorder = exports.Recorder = function () {
             this.callbacks.getCurrentBuffer.push(cb);
 
             this.worker.postMessage({ command: 'getCurrentBuffer' });
+        }
+    }, {
+        key: 'getAudioLossInfo',
+        value: function getAudioLossInfo(cb) {
+            cb = cb || this.config.callback;
+            if (!cb) throw new Error('Callback not set');
+
+            this.callbacks.getAudioLossInfo.push(cb);
+
+            this.worker.postMessage({
+                command: 'getAudioLossInfo',
+                audioLossInfo: {
+                    numberOfBuffers: this.totalNumberOfBuffers,
+                    numberOfLosses: this.lossOccurrences
+                }
+            });
         }
     }, {
         key: 'exportWAV',
