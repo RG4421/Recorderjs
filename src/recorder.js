@@ -322,10 +322,19 @@ export class Recorder {
         let url = (window.URL || window.webkitURL).createObjectURL(blob);
         let link = window.document.createElement('a');
         link.href = url;
-        link.download = filename || 'output.wav';
-        let click = document.createEvent("Event");
-        click.initEvent("click", true, true);
-        link.dispatchEvent(click);
+        link.download = filename || new Date().toISOString() + '.wav';
+        let click = new MouseEvent('click', {
+          view: window,
+          bubbles: true,
+          cancelable: true
+        });
+
+        let cancelled = !link.dispatchEvent(click);
+        if (cancelled) {
+          console.log("download cancelled: A handler called preventDefault.");
+        } else {
+          console.log("download successful: None of the handlers called preventDefault");
+        }
     }
 }
 
